@@ -1,0 +1,75 @@
+---
+- name: Apache Kafka kafka_2.13-3.1.0 playbook install Red Hat 8.4
+  hosts: RedHat8-5nodes
+  remote_user: root
+  vars:
+    package_name: kafka
+    package_version: kafka_2.13-3.1.0
+    
+
+  tasks:
+
+  - name: Create kafka user and data folders
+    shell: |
+      useradd kafka
+      mkdir -p /data/kafka
+      mkdir -p /data/zookeeper
+      echo {{inventory_hostname}} | tail -c 2 > /data/zookeeper/myid
+      chown -R kafka:kafka /data/kafka*
+      chown -R kafka:kafka /data/zookeeper*
+
+  - name: Copy binary to /opt
+    ansible.builtin.copy:
+      src: kafka_2.13-3.1.0.tgz
+      dest: /opt
+      owner: kafka
+      group: kafka
+
+  - name: Extract binary
+    ansible.builtin.unarchive:
+      src: /opt/kafka_2.13-3.1.0.tgz
+      dest: /opt
+      owner: kafka
+      group: kafka
+      remote_src: yes
+
+  - name: Create symbolic link to folder kafka
+    shell: |
+      ln -s /opt/kafka_2.13-3.1.0 /opt/kafka
+      chown -R kafka:kafka /opt/kafka*
+
+  - name: Createt Zookeeper system service
+    ansible.builtin.template:
+      src: zookeeper.service
+      dest: /etc/systemd/system/zookeeper.service
+      owner: root
+      group: root
+
+  - name: Createt Kafka system service
+    ansible.builtin.template:
+      src: kafka.service
+      dest: /etc/systemd/system/kafka.service
+      owner: root
+      group: root
+
+  - name: Select Server config file by node name
+    ansible.builtin.template:
+      src: server-{{inventory_hostname}}.properties
+      dest: /opt/kafka/config/server.properties
+      owner: kafka
+      group: kafka
+
+  - name: Select Zookeeper config file by node name
+    ansible.builtin.template:
+      src: zookeeper.properties
+      dest: /opt/kafka/config/zookeeper.properties
+      owner: kafka
+      group: kafka
+
+  - name: start services Zookeeper and Kafka
+    shell: |
+      systemctl daemon-reload
+      systemctl start zookeeper
+      systemctl start kafka
+      systemctl enable zookeeper.service
+      systemctl enable kafka.service
